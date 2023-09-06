@@ -1,0 +1,65 @@
+#Task1 
+Выгрузите таблицу, в которой будут такие поля:
+название компании-покупателя;
+сумма сделки;
+название компании, которую купили;
+сумма инвестиций, вложенных в купленную компанию;
+доля, которая отображает, во сколько раз сумма покупки превысила сумму вложенных в компанию инвестиций, округлённая до ближайшего целого числа.
+Не учитывайте те сделки, в которых сумма покупки равна нулю. Если сумма инвестиций в компанию равна нулю, исключите такую компанию из таблицы. 
+Отсортируйте таблицу по сумме сделки от большей к меньшей, а затем по названию купленной компании в лексикографическом порядке. Ограничьте таблицу первыми десятью записями.#
+WITH acquiring AS
+                (SELECT c.name as buyer,
+                a.price_amount AS price,
+                a.id AS KEY
+                FROM company as c
+                LEFT JOIN acquisition as a ON a.acquiring_company_id = c.id
+                WHERE a.price_amount > 0),
+acquired AS
+                (SELECT c.name as acqu,
+                c.funding_total as investment,
+                a.id AS KEY
+                FROM company as c
+                LEFT JOIN acquisition as a ON a.acquired_company_id = c.id
+                WHERE c.funding_total > 0)
+SELECT acqd.buyer,
+       acqd.price,
+       acqui.acqu,
+       acqui.investment,
+       ROUND(acqd.price / acqui.investment) AS dolya
+FROM acquiring AS acqd
+    JOIN acquired AS acqui ON acqd.KEY = acqui.KEY
+ORDER BY price DESC, acqu
+LIMIT 10;
+#Task2
+Составьте сводную таблицу и выведите среднюю сумму инвестиций для стран, в которых есть стартапы, зарегистрированные в 2011, 2012 и 2013 годах. Данные за каждый год должны быть в отдельном поле. Отсортируйте таблицу по среднему значению инвестиций за 2011 год от большего к меньшему.#
+WITH
+inv_2011 AS 
+     (SELECT AVG(c.funding_total) as y_2011,
+             country_code as country
+      FROM company as c
+      WHERE EXTRACT(YEAR from CAST(c.founded_at as date)) in (2011,2012,2013)
+      GROUP BY country, EXTRACT(YEAR FROM founded_at)
+      HAVING EXTRACT(YEAR FROM founded_at) = '2011'),
+inv_2012 AS
+      (SELECT AVG(c.funding_total) as y_2012,
+             country_code as country
+      FROM company as c
+      WHERE EXTRACT(YEAR from CAST(c.founded_at as date)) in (2011,2012,2013)
+      GROUP BY country, EXTRACT(YEAR FROM founded_at)
+      HAVING EXTRACT(YEAR FROM founded_at) = '2012'),
+inv_2013 AS
+     (SELECT AVG(c.funding_total) as y_2013,
+             country_code as country
+      FROM company as c
+      WHERE EXTRACT(YEAR from CAST(c.founded_at as date)) in (2011,2012,2013)
+      GROUP BY country, EXTRACT(YEAR FROM founded_at)
+      HAVING EXTRACT(YEAR FROM founded_at) = '2013')              
+SELECT inv_2011.country, 
+       inv_2011.y_2011, 
+       inv_2012.y_2012, 
+       inv_2013.y_2013
+FROM inv_2011
+JOIN inv_2012 ON inv_2011.country = inv_2012.country
+JOIN inv_2013 ON inv_2012.country = inv_2013.country
+ORDER BY inv_2011.y_2011 DESC
+
