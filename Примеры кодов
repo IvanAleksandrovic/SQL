@@ -62,4 +62,104 @@ FROM inv_2011
 JOIN inv_2012 ON inv_2011.country = inv_2012.country
 JOIN inv_2013 ON inv_2012.country = inv_2013.country
 ORDER BY inv_2011.y_2011 DESC
-
+#Task3
+Найдите пользователя, который опубликовал больше всего постов за всё время с момента регистрации. Выведите данные его активности за октябрь 2008 года в таком виде:
+номер недели;
+дата и время последнего поста, опубликованного на этой неделе.#
+with table1 as (SELECT COUNT(id),
+                       user_id
+                FROM stackoverflow.posts
+                GROUP BY user_id
+                ORDER BY COUNT(id) DESC
+                LIMIT 1)
+SELECT EXTRACT(WEEK from p.creation_date)::int as day_week,
+       MAX(p.creation_date)
+FROM table1 as t1
+JOIN stackoverflow.posts as p ON t1.user_id = p.user_id
+WHERE DATE_TRUNC('month', p.creation_date)::date = '2008-10-01'
+GROUP BY day_week
+#Task4
+Используя функцию DATE_TRUNC(), рассчитайте ARPPU/ Поле с датой приведите к типу данных date, а значение ARPPU округлите до двух знаков после запятой.
+SELECT ROUND(SUM(o.total_amt)/COUNT(DISTINCT o.user_id),2),
+       CAST(DATE_TRUNC('year', CAST(created_at AS date)) AS DATE) as new_date
+FROM tools_shop.orders as o
+GROUP BY new_date
+#Task5 Расчет ROI #
+SELECT total_amt * 100 / costs as ROI,
+       cos.dt
+FROM
+(SELECT DATE_TRUNC('month', created_at)::date AS dt,
+       SUM(costs) AS costs
+FROM tools_shop.costs
+GROUP BY dt) as cos
+JOIN
+(SELECT DATE_TRUNC('month', paid_at)::date AS dt,
+       SUM(total_amt) AS total_amt
+FROM tools_shop.orders
+GROUP BY dt) as su ON cos.dt = su.dt
+#Task6
+Отберите данные по месяцам с 2010 по 2013 год, когда проходили инвестиционные раунды. Сгруппируйте данные по номеру месяца и получите таблицу, в которой будут поля:
+номер месяца, в котором проходили раунды;
+количество уникальных названий фондов из США, которые инвестировали в этом месяце;
+количество компаний, купленных за этот месяц;
+общая сумма сделок по покупкам в этом месяце.#
+WITH fundings AS
+                (SELECT EXTRACT(MONTH FROM CAST(fr.funded_at AS DATE)) AS funding_month,
+                COUNT(DISTINCT f.id) AS us_funds
+                FROM fund AS f
+                LEFT JOIN investment AS i ON f.id = i.fund_id
+                LEFT JOIN funding_round AS fr ON i.funding_round_id = fr.id
+                WHERE f.country_code = 'USA'
+                AND EXTRACT(YEAR FROM CAST(fr.funded_at AS DATE)) BETWEEN 2010 AND 2013
+                GROUP BY funding_month),
+acquisitions AS
+                (SELECT EXTRACT(MONTH FROM CAST(acquired_at AS DATE)) AS funding_month,
+                COUNT(acquired_company_id) AS bought_co,
+                SUM(price_amount) AS sum_total
+                FROM acquisition
+                WHERE EXTRACT(YEAR FROM CAST(acquired_at AS DATE)) BETWEEN 2010 AND 2013
+                GROUP BY funding_month)
+SELECT fnd.funding_month, fnd.us_funds, acq.bought_co, acq.sum_total
+FROM fundings AS fnd
+LEFT JOIN acquisitions AS acq ON fnd.funding_month = acq.funding_month; 
+#Task7 
+Снова отобразите лайфтайм, месяц старта когорты и LTV. Сгруппируйте данные по всем трём полям. Отсортируйте данные сначала по возрастанию месяца старта когорты, а потом по возрастанию лайфтайма. Добавьте условие, чтобы учесть только тех пользователей, которые зарегистрировались в 2019 году.
+WITH table1 as (SELECT u.user_id,
+                CAST(DATE_TRUNC('month', u.created_at) as date) as start_cohort,
+                COUNT(u.user_id) OVER (PARTITION BY CAST(DATE_TRUNC('month', u.created_at) as date)) as cohort_size
+                FROM tools_shop.users as u
+                WHERE EXTRACT(year from u.created_at) = 2019),
+     table2 as  (SELECT 
+                 EXTRACT(MONTH FROM AGE(DATE_TRUNC('month', o.created_at)::date, t1.start_cohort)) AS lifetime,
+                 DATE_TRUNC('month', o.created_at)::date AS order_dt,
+                 t1.start_cohort,
+                 t1.cohort_size,
+                 o.total_amt AS revenue
+               FROM table1 AS t1
+               JOIN tools_shop.orders AS o ON t1.user_id = o.user_id),
+    table3 as (SELECT  lifetime,
+                       start_cohort,
+                       cohort_size,
+                       SUM(revenue) OVER (PARTITION BY start_cohort ORDER BY lifetime) / cohort_size as ltv
+                FROM table2)
+SELECT t3.lifetime,
+       t3.start_cohort,
+       t3.LTV
+FROM table3 as t3
+GROUP BY start_cohort, lifetime, ltv
+ORDER BY start_cohort, lifetime 
+#Task8 Напишите запрос, который выгрузит данные о пользователях из Канады (англ. Canada). Разделите пользователей на три группы в зависимости от количества просмотров их профилей:
+пользователям с числом просмотров больше либо равным 350 присвойте группу 1;
+пользователям с числом просмотров меньше 350, но больше либо равно 100 — группу 2;
+пользователям с числом просмотров меньше 100 — группу 3.
+Отобразите в итоговой таблице идентификатор пользователя, количество просмотров профиля и группу. Пользователи с нулевым количеством просмотров не должны войти в итоговую таблицу#
+SELECT id,
+       views,
+       CASE 
+           WHEN views >= 350 THEN 1
+           WHEN views >= 100 AND views < 350 THEN 2
+           WHEN views < 100 THEN 3
+       END as group
+FROM stackoverflow.users
+WHERE location LIKE '%Canada%' AND views != 0
+ORDER BY views DESC
